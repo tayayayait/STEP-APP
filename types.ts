@@ -25,6 +25,41 @@ export interface DailyLog {
   lastSynced: string;
 }
 
+export type StepSyncProvider = 'googleFit' | 'healthKit';
+
+export interface StepSyncTokens {
+  provider: StepSyncProvider;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: string;
+}
+
+export interface StepEntry {
+  date: string;
+  steps: number;
+  source: 'manual' | 'sync';
+}
+
+export interface StepHistoryState {
+  entries: StepEntry[];
+  lastSyncedAt: string | null;
+  lastProvider: StepSyncProvider | null;
+}
+
+export interface StepAggregates {
+  daily: number;
+  weekly: number;
+  monthly: number;
+}
+
+export interface StepSyncStatus {
+  provider: StepSyncProvider;
+  isSyncing: boolean;
+  lastSyncedAt: string | null;
+  error: string | null;
+  retryCount: number;
+}
+
 export interface EncouragementResponse {
   message: string;
   tone: 'celebratory' | 'encouraging' | 'gentle';
