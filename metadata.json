@@ -1,0 +1,5 @@
+{
+  "name": "재활워킹 (RehabWalk)",
+  "description": "수술 후 회복 중인 시니어를 위한 고시인성 걷기 추적 앱. 큰 글씨, 높은 명암비, AI 기반의 맞춤형 격려 메시지를 제공합니다.",
+  "requestFramePermissions": []
+}
