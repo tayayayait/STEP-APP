@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ViewState, UserProfile, EncouragementResponse, AuthState } from './types';
 import { Button } from './components/Button';
 import { ProgressBar } from './components/ProgressBar';
+import { StepSummary } from './components/StepSummary';
 import { generateEncouragement } from './services/geminiService';
 import {
   Activity,
@@ -24,34 +25,26 @@ import {
   setAuthState as persistAuthState,
   subscribeAuthState,
 } from './services/authStore';
+import {
+  getStepsForDate,
+  setStepsForDate,
+  subscribeStepHistory,
+} from './services/stepHistoryStore';
+import { useStepSync } from './hooks/useStepSync';
 
 // Icons wrapped for size consistency
 const Icon = ({ component: Component, size = 24, className = "" }: any) => (
   <Component size={size} className={className} />
 );
 
-const safeSessionStorage = () => (typeof window !== 'undefined' ? window.sessionStorage : undefined);
-
-const getTodayKey = () => `steps_${new Date().toISOString().split('T')[0]}`;
-
-const loadSteps = () => {
-  const storage = safeSessionStorage();
-  if (!storage) return 0;
-  const raw = storage.getItem(getTodayKey());
-  return raw ? parseInt(raw, 10) : 0;
-};
-
-const persistSteps = (value: number) => {
-  const storage = safeSessionStorage();
-  storage?.setItem(getTodayKey(), value.toString());
-};
+const getTodayDate = () => new Date().toISOString().split('T')[0];
+const getTodayKey = () => `steps_${getTodayDate()}`;
 
 const App: React.FC = () => {
   // --- State Management ---
   const [view, setView] = useState<ViewState>(ViewState.ONBOARDING);
   const [authSnapshot, setAuthSnapshot] = useState<AuthState>(getAuthState());
-  const [steps, setSteps] = useState<number>(loadSteps());
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [steps, setSteps] = useState<number>(() => getStepsForDate(getTodayDate()));
   const [encouragement, setEncouragement] = useState<EncouragementResponse | null>(null);
   const [phoneNumberInput, setPhoneNumberInput] = useState('');
   const [nameInput, setNameInput] = useState('');
@@ -60,6 +53,17 @@ const App: React.FC = () => {
   const [formError, setFormError] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const { status: syncStatus, syncNow, history } = useStepSync({
+    enabled: view === ViewState.DASHBOARD,
+  });
+
+  useEffect(() => {
+    const unsubscribe = subscribeStepHistory((next) => {
+      const todayEntry = next.entries.find((entry) => entry.date === getTodayDate());
+      setSteps(todayEntry?.steps ?? 0);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // --- Effects ---
   useEffect(() => {
@@ -84,6 +88,13 @@ const App: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, authSnapshot.profile]);
+
+  useEffect(() => {
+    if (view === ViewState.DASHBOARD && authSnapshot.profile) {
+      fetchEncouragement();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [steps]);
 
   // --- Handlers ---
   const fetchEncouragement = useCallback(async () => {
@@ -158,21 +169,13 @@ const App: React.FC = () => {
   };
 
   const handleSync = () => {
-    setIsSyncing(true);
-    setTimeout(() => {
-      const addedSteps = Math.floor(Math.random() * 100) + 10;
-      const newTotal = steps + addedSteps;
-      setSteps(newTotal);
-      persistSteps(newTotal);
-      setIsSyncing(false);
-      fetchEncouragement();
-    }, 1500);
+    syncNow();
   };
 
   const handleAddWalk = () => {
     const newSteps = steps + 500;
     setSteps(newSteps);
-    persistSteps(newSteps);
+    setStepsForDate(getTodayDate(), newSteps, 'manual');
     fetchEncouragement();
   };
 
@@ -374,15 +377,44 @@ const App: React.FC = () => {
             )}
           </div>
 
+          {/* Sync Status */}
+          <div className="bg-white rounded-[1.75rem] p-5 shadow border border-gray-100 mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Icon component={RefreshCw} size={18} className="text-rehab-blue" />
+                <p className="text-lg font-bold text-gray-800">동기화 상태</p>
+              </div>
+              <span
+                className={`text-sm font-bold px-3 py-1 rounded-full ${
+                  syncStatus.isSyncing
+                    ? 'bg-blue-50 text-rehab-blue'
+                    : syncStatus.error
+                      ? 'bg-red-50 text-red-600'
+                      : 'bg-green-50 text-rehab-green'
+                }`}
+              >
+                {syncStatus.isSyncing ? '동기화 중' : syncStatus.error ? '실패' : '정상'}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">
+              {syncStatus.lastSyncedAt
+                ? `마지막 동기화: ${new Date(syncStatus.lastSyncedAt).toLocaleString('ko-KR')}`
+                : '아직 동기화 기록이 없어요.'}
+            </p>
+            {syncStatus.error && (
+              <p className="text-sm text-red-600 mt-2">{syncStatus.error}</p>
+            )}
+          </div>
+
           {/* Actions */}
           <div className="grid grid-cols-2 gap-4 mb-6">
             <Button
               variant="outline"
               onClick={handleSync}
               className="h-auto py-6 flex-col gap-2 rounded-3xl border-2"
-              disabled={isSyncing}
+              disabled={syncStatus.isSyncing}
             >
-              <div className={`p-3 bg-blue-50 rounded-full text-rehab-blue ${isSyncing ? 'animate-spin' : ''}`}>
+              <div className={`p-3 bg-blue-50 rounded-full text-rehab-blue ${syncStatus.isSyncing ? 'animate-spin' : ''}`}>
                 <Icon component={RefreshCw} size={28} />
               </div>
               <span className="text-lg font-bold text-gray-700">새로고침</span>
@@ -399,6 +431,8 @@ const App: React.FC = () => {
               <span className="text-lg font-bold">걷기 추가</span>
             </Button>
           </div>
+
+          <StepSummary entries={history.entries} />
 
           {steps > 0 && (
             <div className="mt-2">
