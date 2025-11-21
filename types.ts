@@ -128,3 +128,47 @@ export interface VideoMeta {
   url: string;
   description?: string;
 }
+
+export interface AdminTokens {
+  accessToken: string;
+  role: 'admin';
+  expiresAt: string;
+}
+
+export interface AdminProfile {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface AdminState {
+  tokens: AdminTokens | null;
+  profile: AdminProfile | null;
+  isAuthenticated: boolean;
+}
+
+export interface AdminUserRow {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  steps: number;
+  points: number;
+  registeredAt: string;
+  registrationMethod: 'phone' | 'qr';
+  lastActiveAt: string;
+}
+
+export interface AdminRegistrationPayload {
+  name: string;
+  phoneNumber: string;
+  initialSteps?: number;
+  initialPoints?: number;
+  registrationMethod: AdminUserRow['registrationMethod'];
+}
+
+export interface QrRegistrationPayload {
+  name: string;
+  phoneNumber: string;
+  initialSteps?: number;
+  initialPoints?: number;
+}
