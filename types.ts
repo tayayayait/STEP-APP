@@ -118,3 +118,13 @@ export interface RewardState {
   balance: number;
   transactions: RewardTransaction[];
 }
+
+export type VideoCategory = '초기 재활' | '스트레칭' | '호흡/안정' | '균형 강화';
+
+export interface VideoMeta {
+  id: string;
+  title: string;
+  category: VideoCategory;
+  url: string;
+  description?: string;
+}
