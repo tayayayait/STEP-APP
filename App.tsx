@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ViewState, UserProfile, EncouragementResponse, AuthState } from './types';
+import { ViewState, UserProfile, EncouragementResponse, AuthState, RewardState } from './types';
 import { Button } from './components/Button';
 import { ProgressBar } from './components/ProgressBar';
 import { StepSummary } from './components/StepSummary';
+import { RewardHistory } from './components/RewardHistory';
 import { generateEncouragement } from './services/geminiService';
 import {
   Activity,
@@ -30,6 +31,7 @@ import {
   setStepsForDate,
   subscribeStepHistory,
 } from './services/stepHistoryStore';
+import { getRewardState, subscribeRewardState } from './services/rewardService';
 import { useStepSync } from './hooks/useStepSync';
 
 // Icons wrapped for size consistency
@@ -55,7 +57,10 @@ const App: React.FC = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const { status: syncStatus, syncNow, history } = useStepSync({
     enabled: view === ViewState.DASHBOARD,
+    userId: authSnapshot.profile?.id ?? null,
+    tokenSnapshot: authSnapshot.tokens ?? null,
   });
+  const [rewardState, setRewardState] = useState<RewardState | null>(null);
 
   useEffect(() => {
     const unsubscribe = subscribeStepHistory((next) => {
@@ -64,6 +69,18 @@ const App: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const userId = authSnapshot.profile?.id;
+    if (!userId) {
+      setRewardState(null);
+      return undefined;
+    }
+
+    setRewardState(getRewardState(userId));
+    const unsubscribe = subscribeRewardState(userId, setRewardState);
+    return () => unsubscribe();
+  }, [authSnapshot.profile]);
 
   // --- Effects ---
   useEffect(() => {
@@ -431,6 +448,12 @@ const App: React.FC = () => {
               <span className="text-lg font-bold">걷기 추가</span>
             </Button>
           </div>
+
+          {rewardState && (
+            <div className="mb-6">
+              <RewardHistory balance={rewardState.balance} transactions={rewardState.transactions} />
+            </div>
+          )}
 
           <StepSummary entries={history.entries} />
 
