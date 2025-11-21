@@ -97,3 +97,24 @@ export interface AuthApiSchema {
     response: { valid: boolean };
   };
 }
+
+export interface RewardTransactionMetadata {
+  source: 'sync' | 'manual';
+  tokenSnapshot?: { accessToken: string; expiresAt: string };
+}
+
+export interface RewardTransaction {
+  id: string;
+  date: string;
+  label: string;
+  points: number;
+  stepsDelta: number;
+  type: 'earn' | 'spend';
+  createdAt: string;
+  metadata?: RewardTransactionMetadata;
+}
+
+export interface RewardState {
+  balance: number;
+  transactions: RewardTransaction[];
+}

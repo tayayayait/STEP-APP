@@ -7,7 +7,8 @@ import {
   subscribeStepHistory,
 } from '../services/stepHistoryStore';
 import { fetchRemoteSteps, refreshAccessToken, startOAuth } from '../services/stepSyncService';
-import { StepAggregates, StepHistoryState, StepSyncProvider, StepSyncStatus, StepSyncTokens } from '../types';
+import { AuthTokens, RewardTransaction, StepAggregates, StepHistoryState, StepSyncProvider, StepSyncStatus, StepSyncTokens } from '../types';
+import { createTransactionFromSync, recordRewardTransactions } from '../services/rewardService';
 
 const SYNC_INTERVAL = 5 * 60 * 1000;
 const MAX_RETRY = 2;
@@ -15,6 +16,8 @@ const MAX_RETRY = 2;
 interface UseStepSyncOptions {
   enabled?: boolean;
   provider?: StepSyncProvider;
+  userId?: string | null;
+  tokenSnapshot?: AuthTokens | null;
 }
 
 interface UseStepSyncResult {
@@ -25,7 +28,7 @@ interface UseStepSyncResult {
 }
 
 export const useStepSync = (options: UseStepSyncOptions = {}): UseStepSyncResult => {
-  const { enabled = true, provider = 'googleFit' } = options;
+  const { enabled = true, provider = 'googleFit', userId, tokenSnapshot } = options;
   const initialHistory = getStepHistoryState();
   const [status, setStatus] = useState<StepSyncStatus>({
     provider,
@@ -71,7 +74,23 @@ export const useStepSync = (options: UseStepSyncOptions = {}): UseStepSyncResult
       const { entries, tokens: nextTokens } = await fetchRemoteSteps(provider, since, tokens);
       tokensRef.current = nextTokens;
 
+      const previousState = getStepHistoryState();
+      const rewardTransactions: RewardTransaction[] = [];
+
       entries.forEach((entry) => setStepsForDate(entry.date, entry.steps, entry.source));
+      entries.forEach((entry) => {
+        const previousSteps = previousState.entries.find((item) => item.date === entry.date)?.steps ?? 0;
+        const delta = entry.steps - previousSteps;
+        const transaction = createTransactionFromSync(entry.date, delta, tokenSnapshot);
+        if (transaction) {
+          rewardTransactions.push(transaction);
+        }
+      });
+
+      if (rewardTransactions.length > 0 && userId) {
+        await recordRewardTransactions(userId, rewardTransactions);
+      }
+
       const syncedAt = new Date().toISOString();
       recordSyncMetadata(syncedAt, provider);
 
@@ -91,7 +110,7 @@ export const useStepSync = (options: UseStepSyncOptions = {}): UseStepSyncResult
         retryCount: prev.retryCount + 1,
       }));
     }
-  }, [enabled, ensureTokens, history.lastSyncedAt, provider]);
+  }, [enabled, ensureTokens, history.lastSyncedAt, provider, tokenSnapshot, userId]);
 
   const syncNow = useCallback(async () => {
     if (retryTimerRef.current) {
