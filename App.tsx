@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ViewState, UserProfile, EncouragementResponse, AuthState, RewardState } from './types';
+import { ViewState, UserProfile, EncouragementResponse, AuthState, RewardState, VideoMeta } from './types';
 import { Button } from './components/Button';
 import { ProgressBar } from './components/ProgressBar';
 import { StepSummary } from './components/StepSummary';
 import { RewardHistory } from './components/RewardHistory';
+import { VideoList } from './components/VideoList';
+import { VideoPlayer } from './components/VideoPlayer';
 import { generateEncouragement } from './services/geminiService';
 import {
   Activity,
@@ -61,6 +63,8 @@ const App: React.FC = () => {
     tokenSnapshot: authSnapshot.tokens ?? null,
   });
   const [rewardState, setRewardState] = useState<RewardState | null>(null);
+  const [activeTab, setActiveTab] = useState<'progress' | 'videos'>('progress');
+  const [selectedVideo, setSelectedVideo] = useState<VideoMeta | null>(null);
 
   useEffect(() => {
     const unsubscribe = subscribeStepHistory((next) => {
@@ -114,6 +118,15 @@ const App: React.FC = () => {
   }, [steps]);
 
   // --- Handlers ---
+  const handleTabChange = (tab: 'progress' | 'videos') => {
+    setActiveTab(tab);
+  };
+
+  const handleVideoSelect = useCallback((video: VideoMeta) => {
+    setSelectedVideo(video);
+    setActiveTab('videos');
+  }, []);
+
   const fetchEncouragement = useCallback(async () => {
     if (!authSnapshot.profile) return;
 
@@ -354,120 +367,174 @@ const App: React.FC = () => {
 
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto p-6 max-w-md mx-auto w-full pb-24">
-          {/* AI Message Card */}
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-xl shadow-blue-200 mb-8 relative overflow-hidden group">
-            {/* Decoration */}
-            <div className="absolute -right-4 -top-4 bg-white/10 w-24 h-24 rounded-full blur-2xl"></div>
-
-            <div className="flex gap-2 mb-3 items-center text-blue-100">
-              <Icon component={HeartPulse} size={20} />
-              <span className="text-sm font-bold tracking-wider">건강 코치의 한마디</span>
-            </div>
-            <p className="text-2xl font-bold leading-snug break-keep relative z-10">
-              {encouragement ? `"${encouragement.message}"` : '오늘의 응원 메시지를 불러오고 있어요...'}
-            </p>
-          </div>
-
-          {/* Progress Section */}
-          <div className="bg-white rounded-[2rem] p-8 shadow-lg border border-gray-100 flex flex-col items-center mb-6 relative">
-            <div className="flex items-center gap-2 mb-2">
-              <Icon component={Activity} size={20} className="text-gray-400" />
-              <h3 className="text-xl font-bold text-gray-500">오늘의 걸음 수</h3>
-            </div>
-
-            <ProgressBar current={steps} target={user.targetSteps} />
-
-            {isGoalAchieved && (
-              <div className="absolute top-6 right-6 text-yellow-400 animate-bounce drop-shadow-md">
-                <Icon component={CheckCircle} size={40} fill="currentColor" className="text-white" />
-              </div>
-            )}
-
-            {isGoalAchieved ? (
-              <p className="text-center text-rehab-green font-bold text-lg bg-green-50 px-4 py-2 rounded-full mt-2 animate-pulse">
-                목표를 달성하셨어요! 대단해요! 🎉
-              </p>
-            ) : (
-              <p className="text-center text-gray-400 font-medium mt-2">
-                목표까지 <strong className="text-rehab-blue">{(user.targetSteps - steps).toLocaleString()}</strong> 걸음 남았어요
-              </p>
-            )}
-          </div>
-
-          {/* Sync Status */}
-          <div className="bg-white rounded-[1.75rem] p-5 shadow border border-gray-100 mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Icon component={RefreshCw} size={18} className="text-rehab-blue" />
-                <p className="text-lg font-bold text-gray-800">동기화 상태</p>
-              </div>
-              <span
-                className={`text-sm font-bold px-3 py-1 rounded-full ${
-                  syncStatus.isSyncing
-                    ? 'bg-blue-50 text-rehab-blue'
-                    : syncStatus.error
-                      ? 'bg-red-50 text-red-600'
-                      : 'bg-green-50 text-rehab-green'
-                }`}
-              >
-                {syncStatus.isSyncing ? '동기화 중' : syncStatus.error ? '실패' : '정상'}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600">
-              {syncStatus.lastSyncedAt
-                ? `마지막 동기화: ${new Date(syncStatus.lastSyncedAt).toLocaleString('ko-KR')}`
-                : '아직 동기화 기록이 없어요.'}
-            </p>
-            {syncStatus.error && (
-              <p className="text-sm text-red-600 mt-2">{syncStatus.error}</p>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <Button
-              variant="outline"
-              onClick={handleSync}
-              className="h-auto py-6 flex-col gap-2 rounded-3xl border-2"
-              disabled={syncStatus.isSyncing}
+          <div className="flex bg-white rounded-full shadow-sm border border-gray-100 p-1 mb-6" role="tablist">
+            <button
+              type="button"
+              onClick={() => handleTabChange('progress')}
+              className={`flex-1 px-4 py-3 rounded-full text-center text-lg font-bold transition-all ${
+                activeTab === 'progress'
+                  ? 'bg-rehab-blue text-white shadow-md'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+              role="tab"
+              aria-selected={activeTab === 'progress'}
             >
-              <div className={`p-3 bg-blue-50 rounded-full text-rehab-blue ${syncStatus.isSyncing ? 'animate-spin' : ''}`}>
-                <Icon component={RefreshCw} size={28} />
-              </div>
-              <span className="text-lg font-bold text-gray-700">새로고침</span>
-            </Button>
-
-            <Button
-              variant="primary"
-              onClick={handleAddWalk}
-              className="h-auto py-6 flex-col gap-2 rounded-3xl shadow-lg shadow-blue-200"
+              걸음 기록
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('videos')}
+              className={`flex-1 px-4 py-3 rounded-full text-center text-lg font-bold transition-all ${
+                activeTab === 'videos'
+                  ? 'bg-rehab-blue text-white shadow-md'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+              role="tab"
+              aria-selected={activeTab === 'videos'}
             >
-              <div className="p-3 bg-white/20 rounded-full text-white">
-                <Icon component={Footprints} size={28} />
-              </div>
-              <span className="text-lg font-bold">걷기 추가</span>
-            </Button>
+              운동 영상
+            </button>
           </div>
 
-          {rewardState && (
-            <div className="mb-6">
-              <RewardHistory balance={rewardState.balance} transactions={rewardState.transactions} />
-            </div>
-          )}
+          {activeTab === 'progress' ? (
+            <>
+              {/* AI Message Card */}
+              <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-xl shadow-blue-200 mb-8 relative overflow-hidden group">
+                {/* Decoration */}
+                <div className="absolute -right-4 -top-4 bg-white/10 w-24 h-24 rounded-full blur-2xl"></div>
 
-          <StepSummary entries={history.entries} />
+                <div className="flex gap-2 mb-3 items-center text-blue-100">
+                  <Icon component={HeartPulse} size={20} />
+                  <span className="text-sm font-bold tracking-wider">건강 코치의 한마디</span>
+                </div>
+                <p className="text-2xl font-bold leading-snug break-keep relative z-10">
+                  {encouragement ? `"${encouragement.message}"` : '오늘의 응원 메시지를 불러오고 있어요...'}
+                </p>
+              </div>
 
-          {steps > 0 && (
-            <div className="mt-2">
-              <Button
-                variant="kakao"
-                fullWidth
-                onClick={handleShare}
-                icon={<Icon component={MessageCircle} fill="currentColor" />}
-                className="rounded-3xl shadow-md"
-              >
-                가족에게 자랑하기
-              </Button>
+              {/* Progress Section */}
+              <div className="bg-white rounded-[2rem] p-8 shadow-lg border border-gray-100 flex flex-col items-center mb-6 relative">
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon component={Activity} size={20} className="text-gray-400" />
+                  <h3 className="text-xl font-bold text-gray-500">오늘의 걸음 수</h3>
+                </div>
+
+                <ProgressBar current={steps} target={user.targetSteps} />
+
+                {isGoalAchieved && (
+                  <div className="absolute top-6 right-6 text-yellow-400 animate-bounce drop-shadow-md">
+                    <Icon component={CheckCircle} size={40} fill="currentColor" className="text-white" />
+                  </div>
+                )}
+
+                {isGoalAchieved ? (
+                  <p className="text-center text-rehab-green font-bold text-lg bg-green-50 px-4 py-2 rounded-full mt-2 animate-pulse">
+                    목표를 달성하셨어요! 대단해요! 🎉
+                  </p>
+                ) : (
+                  <p className="text-center text-gray-400 font-medium mt-2">
+                    목표까지 <strong className="text-rehab-blue">{(user.targetSteps - steps).toLocaleString()}</strong> 걸음 남았어요
+                  </p>
+                )}
+              </div>
+
+              {/* Sync Status */}
+              <div className="bg-white rounded-[1.75rem] p-5 shadow border border-gray-100 mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Icon component={RefreshCw} size={18} className="text-rehab-blue" />
+                    <p className="text-lg font-bold text-gray-800">동기화 상태</p>
+                  </div>
+                  <span
+                    className={`text-sm font-bold px-3 py-1 rounded-full ${
+                      syncStatus.isSyncing
+                        ? 'bg-blue-50 text-rehab-blue'
+                        : syncStatus.error
+                          ? 'bg-red-50 text-red-600'
+                          : 'bg-green-50 text-rehab-green'
+                    }`}
+                  >
+                    {syncStatus.isSyncing ? '동기화 중' : syncStatus.error ? '실패' : '정상'}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600">
+                  {syncStatus.lastSyncedAt
+                    ? `마지막 동기화: ${new Date(syncStatus.lastSyncedAt).toLocaleString('ko-KR')}`
+                    : '아직 동기화 기록이 없어요.'}
+                </p>
+                {syncStatus.error && (
+                  <p className="text-sm text-red-600 mt-2">{syncStatus.error}</p>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <Button
+                  variant="outline"
+                  onClick={handleSync}
+                  className="h-auto py-6 flex-col gap-2 rounded-3xl border-2"
+                  disabled={syncStatus.isSyncing}
+                >
+                  <div className={`p-3 bg-blue-50 rounded-full text-rehab-blue ${syncStatus.isSyncing ? 'animate-spin' : ''}`}>
+                    <Icon component={RefreshCw} size={28} />
+                  </div>
+                  <span className="text-lg font-bold text-gray-700">새로고침</span>
+                </Button>
+
+                <Button
+                  variant="primary"
+                  onClick={handleAddWalk}
+                  className="h-auto py-6 flex-col gap-2 rounded-3xl shadow-lg shadow-blue-200"
+                >
+                  <div className="p-3 bg-white/20 rounded-full text-white">
+                    <Icon component={Footprints} size={28} />
+                  </div>
+                  <span className="text-lg font-bold">걷기 추가</span>
+                </Button>
+              </div>
+
+              {rewardState && (
+                <div className="mb-6">
+                  <RewardHistory balance={rewardState.balance} transactions={rewardState.transactions} />
+                </div>
+              )}
+
+              <StepSummary entries={history.entries} />
+
+              {steps > 0 && (
+                <div className="mt-2">
+                  <Button
+                    variant="kakao"
+                    fullWidth
+                    onClick={handleShare}
+                    icon={<Icon component={MessageCircle} fill="currentColor" />}
+                    className="rounded-3xl shadow-md"
+                  >
+                    가족에게 자랑하기
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-6">
+              <div className="bg-white rounded-[1.75rem] p-5 shadow border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-sm text-gray-500 font-bold">재활 운동 가이드</p>
+                    <h3 className="text-2xl font-black text-gray-900">따라 하기 좋은 영상</h3>
+                  </div>
+                  <span className="text-xs font-bold text-rehab-blue bg-blue-50 px-3 py-1 rounded-full">안전 모드</span>
+                </div>
+                <VideoPlayer video={selectedVideo} />
+              </div>
+
+              <div className="bg-white rounded-[1.75rem] p-5 shadow border border-gray-100">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full bg-rehab-blue"></span>
+                  <p className="text-lg font-bold text-gray-800">영상 목록</p>
+                </div>
+                <VideoList onSelect={handleVideoSelect} activeVideoId={selectedVideo?.id} />
+              </div>
             </div>
           )}
         </main>
